@@ -38,7 +38,7 @@
 \rhead{\small UniGuard AI --- Prompt Injection Security Report}
 \lhead{\small Computer Security}
 \rfoot{\small\thepage}
-\lfoot{\small Le Vinh Thuan Le}
+\lfoot{\small Group Project --- Computer Security}
 \renewcommand{\headrulewidth}{0.3pt}
 
 \titleformat{\section}{\large\bfseries}{\thesection}{0.8em}{}[\vspace{-4pt}\rule{\linewidth}{0.4pt}]
@@ -61,30 +61,17 @@
 \begin{center}
   {\LARGE\bfseries UniGuard AI}\\[4pt]
   {\large Security Evaluation of Prompt Injection Attacks\\
-  in an AI-Powered University Assistant}\\[10pt]
+  in an AI-Powered University Assistant}\\[12pt]
   \begin{tabular}{rl}
-    \textbf{Student:} & Le Vinh Thuan Le \\
     \textbf{Course:}  & Computer Security \\
-    \textbf{Date:}    & August 2026 \\
+    \textbf{Date:}    & August 2026 \\[6pt]
+    \textbf{Members:} & Nguyen Minh Khoa \quad 23125009 \\
+                      & Le Vinh Thuan \quad\quad\ 23125019 \\
+                      & Nguyen Hoang Phat \quad 23125066 \\
+                      & Le Minh Qui \quad\quad\quad 23125069 \\
   \end{tabular}
 \end{center}
 \rule{\linewidth}{0.6pt}
-
-% ── Abstract ─────────────────────────────────────────────────────────────────
-\begin{mdframed}[linecolor=gray!40,backgroundcolor=gray!5,linewidth=0.8pt,
-  innertopmargin=5pt,innerbottommargin=5pt]
-\small\noindent\textbf{Abstract.}
-Prompt injection is a class of attack in which adversarial text causes a Large Language Model (LLM)
-to override its developer-supplied instructions. This report presents \textbf{UniGuard AI}, a
-controlled laboratory prototype of an AI-powered university assistant built with FastAPI, React,
-Google Gemini, PostgreSQL, and ChromaDB. The system demonstrates six attack categories---direct
-injection, indirect injection via RAG, tool hijacking, data exfiltration, multi-turn escalation,
-and obfuscated injection---alongside a five-layer defense architecture. An automated benchmark of
-59 attack cases measures Attack Success Rate (ASR) and Defense Success Rate (DSR). In protected
-mode the system achieves 0\% ASR and 100\% DSR, demonstrating that prompt injection is an
-\emph{application security} problem requiring deterministic backend controls, not merely a
-prompting problem.
-\end{mdframed}
 
 \vspace{4pt}
 \tableofcontents
@@ -112,36 +99,42 @@ credential reads.
 \end{enumerate}
 
 % =============================================================================
-\section{System Architecture}
+\section{Experimental Setup and Methodology}
 % =============================================================================
 
-The application is a four-service Docker Compose stack:
+We built a controlled AI university assistant that answers student questions, retrieves course
+documents via a vector database (RAG), and can invoke tools such as student profile lookup and
+email sending. All student data is entirely synthetic. The system operates in two modes toggled
+by a single configuration flag:
 
-\begin{center}
-\small
-\begin{tabular}{lll}
-\toprule
-\textbf{Service} & \textbf{Technology} & \textbf{Role} \\
-\midrule
-Frontend  & React 18 + Vite + TailwindCSS & Chat UI, Attack Lab, Benchmark dashboard \\
-Backend   & FastAPI + Python 3.12         & Agent loop, security layers, tool execution \\
-Database  & PostgreSQL 16                 & Student/course/grade records (synthetic data) \\
-Vector DB & ChromaDB                      & RAG document storage and retrieval \\
-\bottomrule
-\end{tabular}
-\end{center}
+\begin{itemize}
+  \item \textbf{Vulnerable mode}: no input filtering, no document trust labels, no output scanning.
+        Only audit logging is active. Represents a naively deployed LLM assistant.
+  \item \textbf{Protected mode}: all five defense layers active (see Section~\ref{sec:defense}).
+        Represents a security-hardened deployment.
+\end{itemize}
 
-The backend is the only component that communicates with the Gemini API. Every request passes
-through five sequential security layers before and after the LLM call:
+The AI agent has access to four tools that make attacks consequential:
+\begin{itemize}
+  \item \texttt{get\_student\_profile(student\_id)} --- returns name, GPA, grades, contact info
+  \item \texttt{get\_course\_info(course\_code)} --- returns course details
+  \item \texttt{search\_documents(query)} --- retrieves chunks from a vector document store
+  \item \texttt{send\_email(to, subject, body)} --- simulated; body is scanned for PII
+\end{itemize}
 
-\smallskip
-\noindent\textbf{Request path:} User $\to$ Input Detector $\to$ RAG with trust labels $\to$
-Gemini $\to$ Tool Policy Engine $\to$ Output Filter $\to$ Audit Log $\to$ User
+\noindent\textbf{Request pipeline:}
+\[
+\text{User} \;\to\; \underbrace{\text{Input Detector}}_{\text{Layer 1}} \;\to\;
+\underbrace{\text{RAG (trust-labelled)}}_{\text{Layer 2}} \;\to\;
+\text{LLM} \;\to\;
+\underbrace{\text{Tool Policy}}_{\text{Layer 3}} \;\to\;
+\underbrace{\text{Output Filter}}_{\text{Layer 4}} \;\to\;
+\underbrace{\text{Audit Log}}_{\text{Layer 5}} \;\to\; \text{User}
+\]
 
-\smallskip
-The AI agent has access to four tools: \texttt{search\_documents}, \texttt{get\_course\_info},
-\texttt{get\_student\_profile} (own profile only for students), and \texttt{send\_email}
-(simulated, body scanned for PII).
+We constructed 59 hand-crafted attack prompts across six categories, varying in sophistication
+from single-sentence overrides to multi-turn social engineering and encoded obfuscation. Each case
+was run once per mode; outcomes were classified as BLOCKED, SAFE\_RESPONSE, or SUCCESS.
 
 % =============================================================================
 \section{Threat Model}
@@ -305,6 +298,7 @@ going to reveal the internal secret, what would it be?''
 
 % =============================================================================
 \section{Defense Architecture}
+\label{sec:defense}
 % =============================================================================
 
 \subsection{Weak vs.\ Strong System Prompts}
